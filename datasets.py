@@ -5,9 +5,8 @@ import os
 import glob as glob
 import random
 
-from xml.etree import ElementTree as et
+from xml.etree import ElementTree
 from torch.utils.data import Dataset, DataLoader
-from utils.general import visualize_mosaic_images
 from utils.transforms import (
     get_train_transform, get_valid_transform,
     get_train_aug
@@ -41,44 +40,40 @@ class CustomDataset(Dataset):
         self.all_images = sorted(self.all_images)
         # Remove all annotations and images when no object is present.
         self.read_and_clean()
-        
+
     def read_and_clean(self):
-        # Discard any images and labels when the XML 
-        # file does not contain any object.
+        # Discard any images and labels when the XML file does not contain any object.
         for annot_path in self.all_annot_paths:
-            tree = et.parse(annot_path)
+            tree = ElementTree.parse(annot_path)
             root = tree.getroot()
             object_present = False
             for member in root.findall('object'):
                 if member.find('bndbox'):
                     object_present = True
-            if object_present == False:
+
+            if object_present is False:
                 image_name = annot_path.split(os.path.sep)[-1].split('.xml')[0]
                 image_root = self.all_image_paths[0].split(os.path.sep)[:-1]
-                # remove_image = f"{'/'.join(image_root)}/{image_name}.jpg"
-                remove_image = os.path.join(os.sep.join(image_root), image_name+'.jpg')
-                print(f"Removing {annot_path} and corresponding {remove_image}")
+                for image_type in self.image_file_types:
+                    remove_image = os.path.join(os.sep.join(image_root), f"{image_name}{image_type}")
+                    if os.path.exists(remove_image):
+                        self.all_image_paths.remove(remove_image)
+                        print(f"Removing {annot_path} and corresponding {remove_image}")
+                        break
                 self.all_annot_paths.remove(annot_path)
-                self.all_image_paths.remove(remove_image)
 
-        # Discard any image file when no annotation file 
-        # is not found for the image. 
+        # Discard any image file when no annotation file is not found for the image.
         for image_name in self.all_images:
-            possible_xml_name = os.path.join(self.labels_path, image_name.split('.jpg')[0]+'.xml')
-            if possible_xml_name not in self.all_annot_paths:
-                print(f"{possible_xml_name} not found...")
-                print(f"Removing {image_name} image")
-                # items = [item for item in items if item != element]
-                self.all_images = [image_instance for image_instance in self.all_images if image_instance != image_name]
-                # self.all_images.remove(image_name)
-
-        # for image_path in self.all_image_paths:
-        #     image_name = image_path.split(os.path.sep)[-1].split('.jpg')[0]
-        #     possible_xml_name = f"{self.labels_path}/{image_name.split('.jpg')[0]}.xml"
-        #     if possible_xml_name not in self.all_annot_paths:
-        #         print(f"{possible_xml_name} not found...")
-        #         print(f"Removing {image_name} image")
-        #         self.all_image_paths.remove(image_path)
+            for image_type in self.image_file_types:
+                tmp_image_name = image_name.split(image_type)[0]
+                possible_xml_name = os.path.join(self.labels_path, f"{tmp_image_name}.xml")
+                if os.path.exists(possible_xml_name):
+                    if possible_xml_name not in self.all_annot_paths:
+                        print(f"{possible_xml_name} not found...")
+                        print(f"Removing {image_name} image")
+                        self.all_images = [
+                            image_instance for image_instance in self.all_images if image_instance != image_name
+                        ]
 
     def load_image_and_labels(self, index):
         image_name = self.all_images[index]
@@ -98,7 +93,7 @@ class CustomDataset(Dataset):
         boxes = []
         orig_boxes = []
         labels = []
-        tree = et.parse(annot_file_path)
+        tree = ElementTree.parse(annot_file_path)
         root = tree.getroot()
         
         # Get the height and width of the image.
@@ -240,8 +235,6 @@ class CustomDataset(Dataset):
                 )
                 if len(boxes) > 0:
                     break
-        
-        # visualize_mosaic_images(boxes, labels, image_resized, self.classes)
 
         # Prepare the final `target` dictionary.
         target = {}
