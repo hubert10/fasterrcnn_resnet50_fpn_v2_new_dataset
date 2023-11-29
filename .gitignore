@@ -1,2 +1,5 @@
 data/
 outputs/*
+.idea
+venv
+__pycache__/
